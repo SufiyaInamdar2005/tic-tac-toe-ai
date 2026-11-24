@@ -1,0 +1,9 @@
+{
+  "name": "tic-tac-toe-ai",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Tic-Tac-Toe AI with Minimax and Difficulty Modes",
+  "scripts": {
+    "test": "node test.js"
+  }
+}

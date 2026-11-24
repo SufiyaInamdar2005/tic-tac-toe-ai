@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tic-Tac-Toe AI ✨</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="app">
+    <h1>Tic-Tac-Toe AI ✨</h1>
+
+    <div class="toggle" id="toggle" data-mode="cute" role="group" aria-label="Difficulty">
+      <span class="toggle-thumb"></span>
+      <button type="button" data-mode="cute" aria-pressed="true">Cute Mode 🌸</button>
+      <button type="button" data-mode="impossible" aria-pressed="false">Impossible Mode 🤖</button>
+    </div>
+
+    <section class="scores" aria-label="Scoreboard">
+      <div class="pill win"><b id="score-win">0</b><span>Wins (You)</span></div>
+      <div class="pill loss"><b id="score-loss">0</b><span>Losses (AI)</span></div>
+      <div class="pill draw"><b id="score-draw">0</b><span>Draws</span></div>
+    </section>
+
+    <div class="status" id="status" role="status" aria-live="polite">Your Turn ✨</div>
+
+    <div class="board" id="board" aria-label="Tic-Tac-Toe board"></div>
+
+    <div class="actions">
+      <button type="button" class="btn primary" id="play-again">Play Again 🔄</button>
+      <button type="button" class="btn ghost" id="reset-scores">Reset Scores</button>
+    </div>
+  </main>
+
+  <script type="module">
+    import {
+      makeMove, makeAIMove, resetBoard, resetGame, setDifficulty, getGameState
+    } from "./game.js";
+
+    const AI_DELAY = 350;
+
+    const boardEl = document.getElementById("board");
+    const statusEl = document.getElementById("status");
+    const toggleEl = document.getElementById("toggle");
+    const scoreEls = {
+      win: document.getElementById("score-win"),
+      loss: document.getElementById("score-loss"),
+      draw: document.getElementById("score-draw"),
+    };
+
+    let locked = false;      // true while AI is thinking
+    let aiTimer = null;
+    let winLine = [];
+    let prevBoard = Array(9).fill(null);
+    let prevScores = { win: 0, loss: 0, draw: 0 };
+
+    // Build the 9 cells once
+    const cells = Array.from({ length: 9 }, (_, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cell";
+      btn.setAttribute("aria-label", `Cell ${i + 1}`);
+      btn.addEventListener("click", () => onCellClick(i));
+      boardEl.appendChild(btn);
+      return btn;
+    });
+
+    const isEmpty = v => v === null || v === "" || v === undefined || v === " ";
+
+    function renderBoard(board, gameActive) {
+      board.forEach((value, i) => {
+        const cell = cells[i];
+        const filled = !isEmpty(value);
+
+        // Only re-create the mark (and replay the pop animation) when the cell changes
+        if (value !== prevBoard[i]) {
+          cell.innerHTML = filled ? `<span class="mark">${value}</span>` : "";
+        }
+        cell.classList.toggle("x", value === "X");
+        cell.classList.toggle("o", value === "O");
+        cell.classList.toggle("winner", winLine.includes(i));
+        cell.disabled = filled || locked || !gameActive;
+        if (filled) cell.setAttribute("aria-label", `Cell ${i + 1}, ${value}`);
+        else cell.setAttribute("aria-label", `Cell ${i + 1}, empty`);
+      });
+      prevBoard = [...board];
+    }
+
+    function renderScores(scores) {
+      for (const key of ["win", "loss", "draw"]) {
+        scoreEls[key].textContent = scores[key];
+        if (scores[key] > prevScores[key]) {
+          const pill = scoreEls[key];
+          pill.classList.remove("bump");
+          void pill.offsetWidth;
+          pill.classList.add("bump");
+        }
+      }
+      prevScores = { ...scores };
+    }
+
+    function setStatus(text, kind = "") {
+      statusEl.textContent = text;
+      statusEl.className = "status" + (kind ? " " + kind : "");
+    }
+
+    function showResult(status) {
+      winLine = Array.isArray(status.line) ? status.line : [];
+      if (status.winner === "X") setStatus("You Won! 🎉", "won");
+      else if (status.winner === "O") setStatus("AI Wins! 🤖", "lost");
+      else setStatus("It's a Draw! 🤝", "draw");
+    }
+
+    // Apply a result object from makeMove / makeAIMove
+    function applyResult(res) {
+      if (!res.gameActive && res.status) showResult(res.status);
+      renderBoard(res.board, res.gameActive);
+      renderScores(res.scores);
+    }
+
+    function onCellClick(index) {
+      if (locked) return;
+      const res = makeMove(index, "X");
+      if (!res || !res.success) return;
+
+      if (!res.gameActive) {
+        applyResult(res);
+        return;
+      }
+
+      // Game continues: lock the board and let the AI reply
+      locked = true;
+      applyResult(res);
+      setStatus("AI is thinking... 💭", "thinking");
+
+      aiTimer = setTimeout(() => {
+        aiTimer = null;
+        const aiRes = makeAIMove();
+        locked = false;
+        applyResult(aiRes);
+        if (aiRes.gameActive) setStatus("Your Turn ✨");
+      }, AI_DELAY);
+    }
+
+    function cancelPendingAI() {
+      if (aiTimer) { clearTimeout(aiTimer); aiTimer = null; }
+      locked = false;
+    }
+
+    function syncFromState() {
+      const state = getGameState();
+      winLine = [];
+      renderBoard(state.board, state.gameActive);
+      renderScores(state.scores);
+      setStatus("Your Turn ✨");
+    }
+
+    document.getElementById("play-again").addEventListener("click", () => {
+      cancelPendingAI();
+      resetBoard();
+      prevBoard = Array(9).fill(null);
+      syncFromState();
+    });
+
+    document.getElementById("reset-scores").addEventListener("click", () => {
+      cancelPendingAI();
+      resetGame(true);
+      prevBoard = Array(9).fill(null);
+      syncFromState();
+    });
+
+    toggleEl.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const mode = btn.dataset.mode;
+        setDifficulty(mode);
+        toggleEl.dataset.mode = mode;
+        toggleEl.querySelectorAll("button").forEach(b =>
+          b.setAttribute("aria-pressed", String(b === btn)));
+      });
+    });
+
+    // Initial render from the engine's current state
+    setDifficulty("cute");
+    prevBoard = Array(9).fill(null);
+    syncFromState();
+  </script>
+</body>
+</html>
